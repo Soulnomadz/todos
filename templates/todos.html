@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Todo 列表</title>
+</head>
+<body>
+    <h1>我的 Todo 列表</h1>
+    <!-- 遍历 todos 向量，each_todo 是循环中的单个 Todo 实例 -->
+    <ul>
+        {% for each_todo in todos %}
+            <li>
+                <!-- 访问 Todo 的字段：id、text、completed -->
+                {{ each_todo.id }}. {{ each_todo.text }}
+                {% if each_todo.completed %}
+                    <span style="color: green;">✅ 已完成</span>
+                {% else %}
+                    <span style="color: red;">🔴 未完成</span>
+                {% endif %}
+            </li>
+        {% else %}
+            <!-- 当 todos 为空向量时，执行 else 逻辑 -->
+            <li>暂无 Todo 任务</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

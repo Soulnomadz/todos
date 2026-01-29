@@ -22,7 +22,12 @@ pub async fn list_todos(req: &mut Request, res: &mut Response) {
             salvo::http::StatusCode::BAD_REQUEST
         }).unwrap();
 
-    res.render(Json(todos));
+    let templates = crate::get_templates();
+    let mut context = tera::Context::new();
+    context.insert("todos", &todos);
+    let rendered = templates.render("todos.html", &context).unwrap();
+
+    res.render(Text::Html(rendered));
 } 
 
 #[handler]

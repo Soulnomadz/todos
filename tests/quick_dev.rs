@@ -31,11 +31,12 @@ async fn test_02_add_todo() -> httpc_test::Result<()> {
 //"text": "check me here",
 //"completed": false
 //}"#;
+//
+//    let todo = serde_json::from_str::<Todo>(data).unwrap();
 
     let res = hc.do_post(
         "/todos",
 	serde_json::json!(test_todo()),
-	// serde_json::json!(data),      //会报错，原因不明
     ).await?;
 
     res.print().await?;
