@@ -1,0 +1,80 @@
+use todos::types::*;
+
+fn test_todo() -> Todo {
+    Todo {
+	id: 4,
+	text: "test todo".into(),
+	completed: false,
+    }
+}
+
+#[tokio::test]
+async fn test_01_get_todos() -> httpc_test::Result<()> {
+    let hc = httpc_test::new_client("http://localhost:8089")?;
+
+    let res = hc.do_get(
+	"/todos",
+    ).await?;
+
+    res.print().await?;
+    assert_eq!(res.status(), salvo::http::StatusCode::OK);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_02_add_todo() -> httpc_test::Result<()> {
+    let hc = httpc_test::new_client("http://localhost:8089")?;
+
+//    let data = r#"{
+//"id": 4,
+//"text": "check me here",
+//"completed": false
+//}"#;
+
+    let res = hc.do_post(
+        "/todos",
+	serde_json::json!(test_todo()),
+	// serde_json::json!(data),      //会报错，原因不明
+    ).await?;
+
+    res.print().await?;
+    assert_eq!(res.status(), salvo::http::StatusCode::OK);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_03_update_todo() -> httpc_test::Result<()> {
+    let hc = httpc_test::new_client("http://localhost:8089")?;
+
+    let new_todo = Todo {
+	id: 4,
+      	text: "new test todo".into(),
+	completed: false,
+    };
+
+    let res = hc.do_put(
+        "/todos/4",
+        serde_json::json!(new_todo),
+    ).await?;
+
+    res.print().await?;
+    assert_eq!(res.status(), salvo::http::StatusCode::OK);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_04_delete_todo() -> httpc_test::Result<()> {
+    let hc = httpc_test::new_client("http://localhost:8089")?;
+
+    let res = hc.do_delete(
+        "/todos/4",
+    ).await?;
+
+    res.print().await?;
+    assert_eq!(res.status(), salvo::http::StatusCode::OK);
+
+    Ok(())
+}

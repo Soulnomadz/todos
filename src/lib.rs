@@ -1,6 +1,6 @@
 mod handler;
-mod types;
-mod routes;
+pub mod types;
+pub mod routes;
 mod db;
 
 use salvo::prelude::*;
