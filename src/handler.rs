@@ -31,6 +31,34 @@ pub async fn list_todos(req: &mut Request, res: &mut Response) {
 } 
 
 #[handler]
+pub async fn get_todo_by_id(req: &mut Request, res: &mut Response) {
+    let id = match req.param::<i64>("id") {
+        Some(id) => id,
+        None => {
+            tracing::debug!("Error: bad param id");
+            res.status_code(StatusCode::BAD_REQUEST);
+            return;
+        }
+    };
+
+    match sqlx::query_as!(
+        Todo,
+        "select id,text,completed from public.todos where id = $1",
+	id
+    ).fetch_optional(get_pgpool()).await {
+	Ok(Some(todo)) => res.render(Json(todo)),
+	Ok(None) => {
+	    tracing::debug!("todo not found with id: {}", id);
+	    res.render(Json({}));
+	},
+	Err(e) => {
+            tracing::debug!("Error: {}", e);
+            salvo::http::StatusCode::INTERNAL_SERVER_ERROR;
+	},
+    }
+}
+
+#[handler]
 pub async fn create_todo(req: &mut Request, res: &mut Response) {
     let new_todo: NewTodo = req
         .parse_body_with_max_size(512)
@@ -40,11 +68,12 @@ pub async fn create_todo(req: &mut Request, res: &mut Response) {
             salvo::http::StatusCode::BAD_REQUEST
         }).unwrap();
     
-    sqlx::query!(
-        "insert into public.todos (text) values ($1)",
+    let ret = sqlx::query!(
+        "insert into public.todos (text) values ($1) returning id",
         new_todo.text,
     )
-        .execute(get_pgpool())
+        //.execute(get_pgpool())
+	.fetch_one(get_pgpool())
         .await
         .map_err(|e| {
             tracing::debug!("Error: {}", e);
@@ -52,39 +81,20 @@ pub async fn create_todo(req: &mut Request, res: &mut Response) {
         }).unwrap();
 
     tracing::debug!(todo = ?new_todo, "create todo");
+
+    res.render(Text::Plain(ret.id.to_string()));
 }
 
 #[handler]
 pub async fn update_todo(req: &mut Request, res: &mut Response) {
-    let raw_id = req.param("id").unwrap_or("id missin");
-
-    let id = match req.try_param::<i64>("id") {
-        Ok(id) => id,
-        Err(e) => {
-            tracing::debug!(
-                error = %e,
-                id = raw_id,
-                "Error:"
-            );
-
+    let id = match req.param::<i64>("id") {
+        Some(id) => id,
+        None => {
+            tracing::debug!("Error: bad param id");
             res.status_code(StatusCode::BAD_REQUEST);
             return;
         }
     };
-
-//    let raw_id: String = req.param("id")
-//      .ok_or_else(|| {
-//          tracing::debug!("id missin");
-//          StatusError::bad_request().detail("id missing");
-//          return;
-//      }).unwrap();
-//
-//    let id = raw_id.parse::<i64>()
-//      .map_err(|_| {
-//          tracing::debug!(id = raw_id, "params: ");
-//          StatusError::bad_request().detail("invalid id");
-//          return;
-//      }).unwrap();
 
     tracing::debug!(id = id, "params:");
 
@@ -114,20 +124,12 @@ pub async fn update_todo(req: &mut Request, res: &mut Response) {
     }
 }
 
-
 #[handler]
 pub async fn delete_todo(req: &mut Request, res: &mut Response) {
-    let raw_id = req.param("id").unwrap_or("id missin");
-
-    let id = match req.try_param::<i64>("id") {
-        Ok(id) => id,
-        Err(e) => {
-            tracing::debug!(
-                error = %e,
-                id = raw_id,
-                "Error:"
-            );
-
+    let id = match req.param::<i64>("id") {
+        Some(id) => id,
+        None => {
+            tracing::debug!("Error: bad param id");
             res.status_code(StatusCode::BAD_REQUEST);
             return;
         }

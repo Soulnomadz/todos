@@ -17,6 +17,7 @@ fn todo_route() -> Router {
         .post(create_todo)
         .push(
             Router::with_path("{id}")
+		.get(get_todo_by_id)
                 .put(update_todo)
                 .delete(delete_todo)
         )

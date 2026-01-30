@@ -16,24 +16,17 @@ async fn test_01_get_todos() -> httpc_test::Result<()> {
 	"/todos",
     ).await?;
 
-    res.print().await?;
+    //res.print().await?;
     assert_eq!(res.status(), salvo::http::StatusCode::OK);
 
     Ok(())
 }
 
 #[tokio::test]
-async fn test_02_add_todo() -> httpc_test::Result<()> {
+async fn test_02_crud_todo() -> httpc_test::Result<()> {
     let hc = httpc_test::new_client("http://localhost:8089")?;
 
-//    let data = r#"{
-//"id": 4,
-//"text": "check me here",
-//"completed": false
-//}"#;
-//
-//    let todo = serde_json::from_str::<Todo>(data).unwrap();
-
+    // test create todo
     let res = hc.do_post(
         "/todos",
 	serde_json::json!(test_todo()),
@@ -42,9 +35,36 @@ async fn test_02_add_todo() -> httpc_test::Result<()> {
     res.print().await?;
     assert_eq!(res.status(), salvo::http::StatusCode::OK);
 
+    let id = res.text_body()?;
+    let url = format!("/todos/{id}");
+
+    // test update todo
+    let new_todo = Todo {
+        id: 4,
+        text: "new test todo".into(),
+        completed: false,
+    };
+
+    let res = hc.do_put(
+        &url,
+        serde_json::json!(new_todo),
+    ).await?;
+
+    res.print().await?;
+    assert_eq!(res.status(), salvo::http::StatusCode::OK);
+
+    // test delete todo
+    let res = hc.do_delete(
+    	&url,
+    ).await?;
+
+    res.print().await?;
+    assert_eq!(res.status(), salvo::http::StatusCode::OK);
+
     Ok(())
 }
 
+/*
 #[tokio::test]
 async fn test_03_update_todo() -> httpc_test::Result<()> {
     let hc = httpc_test::new_client("http://localhost:8089")?;
@@ -79,3 +99,4 @@ async fn test_04_delete_todo() -> httpc_test::Result<()> {
 
     Ok(())
 }
+*/
