@@ -13,7 +13,7 @@ pub fn index(res: &mut Response) {
 pub async fn list_todos(req: &mut Request, res: &mut Response) {
     let todos: Vec<Todo> = sqlx::query_as!(
         Todo,
-        "select id,text,completed from public.todos",
+        "select id,text,completed from public.todos order by id desc",
     )
         .fetch_all(get_pgpool())
         .await
@@ -32,7 +32,7 @@ pub async fn list_todos(req: &mut Request, res: &mut Response) {
 
 #[handler]
 pub async fn create_todo(req: &mut Request, res: &mut Response) {
-    let new_todo: Todo = req
+    let new_todo: NewTodo = req
         .parse_body_with_max_size(512)
         .await
         .map_err(|e| {
@@ -41,10 +41,8 @@ pub async fn create_todo(req: &mut Request, res: &mut Response) {
         }).unwrap();
     
     sqlx::query!(
-        "insert into public.todos (id, text, completed) values ($1, $2, $3)",
-        new_todo.id,
+        "insert into public.todos (text) values ($1)",
         new_todo.text,
-        new_todo.completed,
     )
         .execute(get_pgpool())
         .await

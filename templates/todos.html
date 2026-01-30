@@ -1,26 +1,114 @@
+<!-- templates/todos.html -->
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-    <title>Todo 列表</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的 Todo 列表</title>
+    <link rel="stylesheet" href="/static/css/todos.css">
 </head>
 <body>
-    <h1>我的 Todo 列表</h1>
-    <!-- 遍历 todos 向量，each_todo 是循环中的单个 Todo 实例 -->
-    <ul>
-        {% for each_todo in todos %}
-            <li>
-                <!-- 访问 Todo 的字段：id、text、completed -->
-                {{ each_todo.id }}. {{ each_todo.text }}
-                {% if each_todo.completed %}
-                    <span style="color: green;">✅ 已完成</span>
-                {% else %}
-                    <span style="color: red;">🔴 未完成</span>
-                {% endif %}
+    <div class="container">
+        <header>
+            <h1>我的 Todo 列表</h1>
+            <div class="subtitle">点击待办内容直接编辑，按回车保存</div>
+        </header>
+        
+        <div class="controls">
+            <button class="add-todo-btn" id="addTodoBtn">
+                <span class="add-icon">+</span>
+                <span>新增待办</span>
+            </button>
+            
+            <div class="view-controls">
+                <button class="view-btn active" id="showAllBtn" data-view="all">
+                    <span class="view-icon">📋</span>
+                    <span>显示全部</span>
+                </button>
+                <button class="view-btn" id="hideCompletedBtn" data-view="active">
+                    <span class="view-icon">👁️</span>
+                    <span>隐藏已完成</span>
+                </button>
+                <button class="view-btn" id="showOnlyCompletedBtn" data-view="completed">
+                    <span class="view-icon">✅</span>
+                    <span>只看完成</span>
+                </button>
+            </div>
+        </div>
+        
+        <div class="new-todo-input-container" id="newTodoInputContainer">
+            <input 
+                type="text" 
+                class="new-todo-input" 
+                id="newTodoInput"
+                placeholder="输入待办事项内容，按回车键保存"
+                maxlength="200"
+            >
+            <div class="input-hint">
+                <span class="enter-icon">↵</span>
+                <span>按回车键保存，ESC 键取消</span>
+            </div>
+        </div>
+        
+        <!-- 已完成事项分隔线 -->
+        <div class="completed-separator" id="completedSeparator">
+            <div class="separator-line"></div>
+            <span class="separator-text">已完成事项</span>
+        </div>
+        
+        <ul class="todo-list" id="todoList">
+            {% for todo in todos %}
+            <li class="todo-item {% if todo.completed %}completed{% endif %}" 
+                data-id="{{ todo.id }}" 
+                data-completed="{{ todo.completed }}">
+                <input 
+                    type="checkbox" 
+                    class="todo-checkbox" 
+                    id="todo-{{ todo.id }}"
+                    {% if todo.completed %}checked{% endif %}
+                >
+                <div class="todo-content">
+                    <div class="todo-text-container" data-id="{{ todo.id }}">
+                        <span class="todo-text">{{ todo.text }}</span>
+                        <div class="edit-hint">
+                            <span class="enter-icon">↵</span>
+                            <span>按回车保存，ESC 取消</span>
+                        </div>
+                    </div>
+                    <input 
+                        type="text" 
+                        class="todo-edit-input" 
+                        id="edit-todo-{{ todo.id }}"
+                        value="{{ todo.text }}"
+                        maxlength="200"
+                    >
+                    <div class="todo-actions">
+                        <button class="delete-btn" data-id="{{ todo.id }}">
+                            <span class="btn-text">删除</span>
+                            <span class="loading-spinner" style="display: none;"></span>
+                        </button>
+                    </div>
+                </div>
             </li>
-        {% else %}
-            <!-- 当 todos 为空向量时，执行 else 逻辑 -->
-            <li>暂无 Todo 任务</li>
-        {% endfor %}
-    </ul>
+            {% endfor %}
+        </ul>
+        
+        <div id="status-message" class="status-message"></div>
+        <div id="loading" class="loading">处理中...</div>
+        
+        <div class="footer">
+            <p>共 <span id="totalCount">{{ todos|length }}</span> 个待办事项</p>
+            {% set completed_count = 0 %}
+            {% for todo in todos %}
+                {% if todo.completed %}
+                    {% set completed_count = completed_count + 1 %}
+                {% endif %}
+            {% endfor %}
+            <p>已完成：<span id="completedCount">{{ completed_count }}</span> 个</p>
+            <p>未完成：<span id="activeCount">{{ todos|length - completed_count }}</span> 个</p>
+        </div>
+    </div>
+
+    <script src="/static/js/todos.js"></script>
 </body>
 </html>

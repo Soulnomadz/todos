@@ -7,8 +7,14 @@ pub struct Todo {
     pub completed: bool,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct NewTodo {
+    pub text: String,
+}
+
 #[derive(Deserialize, Debug, Default)]
 pub struct ListOptions {
     pub offset: Option<usize>,
     pub limit: Option<usize>,
 }
+
