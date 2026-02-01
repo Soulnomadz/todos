@@ -2,6 +2,7 @@ mod handler;
 pub mod types;
 pub mod routes;
 mod db;
+mod middleware;
 
 use salvo::prelude::*;
 use sqlx::PgPool;

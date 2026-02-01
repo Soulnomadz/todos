@@ -5,8 +5,9 @@ edition = "2024"
 
 [dependencies]
 dotenvy = "0.15.7"
+futures = "0.3.31"
 postgres = "0.19.12"
-salvo.workspace = true
+salvo = { workspace = true, features = ["basic-auth"] }
 serde = { version = "1.0.228", features = ["derive"] }
 sqlx = { version = "0.8.6", features = ["postgres", "runtime-tokio", "time"] }
 tera = "1.20.1"
