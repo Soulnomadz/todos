@@ -1,5 +1,6 @@
 use salvo::prelude::*;
 use salvo::http::HeaderValue;
+use salvo::session::Session;
 use crate::db::get_pgpool;
 use crate::types::*;
 
@@ -15,20 +16,38 @@ pub fn index(res: &mut Response) {
 }
 
 #[handler]
-pub async fn list_todos(req: &mut Request, res: &mut Response) {
+pub async fn list_todos(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    let session = match depot.session() {
+	Some(s) => s,
+	None => {
+    	    res.render(Redirect::found("/"));
+	    return;
+	}
+    };
+
+    let username = match session.get::<String>("username") {
+	Some(name) => name,
+	None => {
+	    tracing::warn!("获取用户名失败或用户名不存在");
+    	    res.render(Redirect::found("/"));
+	    return;
+	}
+    };
+
     let todos: Vec<Todo> = sqlx::query_as!(
         Todo,
         "select id,text,completed from public.todos order by id desc",
     )
-        .fetch_all(get_pgpool())
-        .await
-        .map_err(|e| {
-            tracing::debug!("Error: {}", e);
-            salvo::http::StatusCode::BAD_REQUEST
-        }).unwrap();
+    .fetch_all(get_pgpool())
+    .await
+    .map_err(|e| {
+        tracing::debug!("Error: {}", e);
+        salvo::http::StatusCode::BAD_REQUEST
+    }).unwrap();
 
     let templates = crate::get_templates();
     let mut context = tera::Context::new();
+    context.insert("username", &username);
     context.insert("todos", &todos);
     let rendered = templates.render("todos.html", &context).unwrap();
 
@@ -156,7 +175,7 @@ pub async fn delete_todo(req: &mut Request, res: &mut Response) {
 }
 
 #[handler]
-pub async fn login(req: &mut Request, res: &mut Response) {
+pub async fn login(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let user = req.form::<String>("username").await.unwrap_or_default();
     let pass = req.form::<String>("password").await.unwrap_or_default();
 
@@ -168,6 +187,13 @@ pub async fn login(req: &mut Request, res: &mut Response) {
 
     
     if user_exist.is_some() {
+	let mut session = Session::new();
+	session.insert(
+	    "username", 
+	    user
+	).unwrap();
+	depot.set_session(session);
+
 	res.headers_mut().insert(
 	    "HX-Redirect",
 	    HeaderValue::from_str("/todos").unwrap()
@@ -176,4 +202,12 @@ pub async fn login(req: &mut Request, res: &mut Response) {
 	let error_html = "<span>用户名或密码错误，请重新输入！</span>";
         res.render(Text::Html(error_html));
     }
+}
+
+#[handler]
+pub async fn logout(depot: &mut Depot, res: &mut Response) {
+    if let Some(session) = depot.session_mut() {
+        session.remove("username");
+    }
+    res.render(Redirect::other("/"));
 }

@@ -1,14 +1,25 @@
 use salvo::prelude::*;
 use crate::handler::*;
 use salvo::basic_auth::BasicAuth;
+use salvo::session::{CookieStore, Session, SessionDepotExt, SessionHandler};
 
 pub fn route() -> Router {
     //let auth_handler = BasicAuth::new(crate::middleware::Validator);
 
+    let session_handler = SessionHandler::builder(
+	CookieStore::new(),
+	b"secretabsecretabsecretabsecretabsecretabsecretabsecretabsecretab",
+    )
+    .cookie_name("xxx-cn")
+    .build()
+    .unwrap();
+
     Router::new()
 	//.hoop(auth_handler)
+	.hoop(session_handler)
         .push(Router::new().get(index))
 	.push(Router::new().path("login").post(login))
+        .push(Router::new().path("logout").get(logout))
         .push(Router::new().path("todos").push(todo_route()))
 	.push(
 	    Router::with_path("/static/{**path}")
@@ -27,3 +38,4 @@ fn todo_route() -> Router {
                 .delete(delete_todo)
         )
 }
+

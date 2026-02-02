@@ -450,3 +450,51 @@ h1 {
         margin-top: 8px;
     }
 }
+
+/* 页头整体布局：弹性布局，左右对齐 */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+/* 左侧标题区域：保持原有排版 */
+.header-left {
+    flex: 1;
+}
+
+/* 右侧区域：整体右对齐，弹性布局排列用户名和登出按钮 */
+.header-right {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end; /* 关键：实现整体右对齐 */
+    gap: 15px; /* 用户名和登出按钮之间的间距 */
+    color: #666;
+    font-size: 14px;
+}
+
+/* 用户名样式 */
+.username-display {
+    background-color: #f5f5f5;
+    padding: 6px 12px;
+    border-radius: 16px;
+}
+
+/* 登出按钮样式 */
+.logout-btn {
+    color: #ff4444;
+    text-decoration: none;
+    padding: 6px 12px;
+    border-radius: 16px;
+    border: 1px solid #ff4444;
+    transition: all 0.2s ease;
+}
+
+/* 鼠标悬浮效果，提升交互体验 */
+.logout-btn:hover {
+    background-color: #ff4444;
+    color: white;
+}
