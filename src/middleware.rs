@@ -7,3 +7,4 @@ impl BasicAuthValidator for Validator {
 	username == "root" && password == "pwd"
     }
 }
+

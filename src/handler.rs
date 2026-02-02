@@ -1,12 +1,17 @@
 use salvo::prelude::*;
+use salvo::http::HeaderValue;
 use crate::db::get_pgpool;
 use crate::types::*;
 
 #[handler]
 pub fn index(res: &mut Response) {
-    res.render(Text::Html(
-        "<a href=\"/todos\">going to the todo page</a>"
-    ));     
+    let templates = crate::get_templates();
+    let mut context = tera::Context::new();
+    context.insert("username", "");
+    context.insert("error_msg", "");
+    let rendered = templates.render("login.html", &context).unwrap();
+
+    res.render(Text::Html(rendered));     
 }
 
 #[handler]
@@ -72,7 +77,6 @@ pub async fn create_todo(req: &mut Request, res: &mut Response) {
         "insert into public.todos (text) values ($1) returning id",
         new_todo.text,
     )
-        //.execute(get_pgpool())
 	.fetch_one(get_pgpool())
         .await
         .map_err(|e| {
@@ -148,5 +152,28 @@ pub async fn delete_todo(req: &mut Request, res: &mut Response) {
         res.status_code(StatusCode::BAD_REQUEST);
     } else {
         tracing::debug!(id = id, "deleted: ");
+    }
+}
+
+#[handler]
+pub async fn login(req: &mut Request, res: &mut Response) {
+    let user = req.form::<String>("username").await.unwrap_or_default();
+    let pass = req.form::<String>("password").await.unwrap_or_default();
+
+    let user_exist = sqlx::query!(
+	"select id from users where name = $1 and pass = $2",
+	user,
+	pass,
+    ).fetch_optional(get_pgpool()).await.unwrap_or_default();
+
+    
+    if user_exist.is_some() {
+	res.headers_mut().insert(
+	    "HX-Redirect",
+	    HeaderValue::from_str("/todos").unwrap()
+	);
+    } else {
+	let error_html = "<span>用户名或密码错误，请重新输入！</span>";
+        res.render(Text::Html(error_html));
     }
 }

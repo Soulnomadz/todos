@@ -3,11 +3,12 @@ use crate::handler::*;
 use salvo::basic_auth::BasicAuth;
 
 pub fn route() -> Router {
-    let auth_handler = BasicAuth::new(crate::middleware::Validator);
+    //let auth_handler = BasicAuth::new(crate::middleware::Validator);
 
     Router::new()
-	.hoop(auth_handler)
+	//.hoop(auth_handler)
         .push(Router::new().get(index))
+	.push(Router::new().path("login").post(login))
         .push(Router::new().path("todos").push(todo_route()))
 	.push(
 	    Router::with_path("/static/{**path}")
