@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户注册</title>
+    <style>
+        /* 原有样式完全保留，无需修改 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+        body {
+            background-color: #f5f7fa;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .register-card {
+            background-color: #ffffff;
+            width: 100%;
+            max-width: 420px;
+            padding: 32px;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+        }
+        .register-title {
+            font-size: 24px;
+            color: #333333;
+            text-align: center;
+            margin-bottom: 28px;
+            font-weight: 600;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-label {
+            display: block;
+            font-size: 14px;
+            color: #666666;
+            margin-bottom: 8px;
+        }
+        .form-input {
+            width: 100%;
+            height: 44px;
+            padding: 0 16px;
+            border: 1px solid #dcdcdc;
+            border-radius: 4px;
+            font-size: 14px;
+            color: #333333;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+        .form-input:focus {
+            border-color: #1677ff;
+            box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.1);
+        }
+        .error-tip {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 13px;
+            color: #ff4d4f;
+            background-color: #fff2f2;
+            border-radius: 4px;
+            display: none;
+        }
+        .error-tip.has-error {
+            display: block;
+        }
+        .register-btn {
+            width: 100%;
+            height: 44px;
+            background-color: #1677ff;
+            color: #ffffff;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        .register-btn:hover {
+            background-color: #0958d9;
+        }
+        .login-link {
+            margin-top: 16px;
+            text-align: center;
+            font-size: 14px;
+            color: #666666;
+        }
+        .login-link a {
+            color: #1677ff;
+            text-decoration: none;
+        }
+        .login-link a:hover {
+            text-decoration: underline;
+        }
+
+        /* 密码校验样式 */
+        .pwd-check-tip {
+            font-size: 12px;
+            margin-top: 4px;
+            height: 16px; /* 固定高度，避免页面抖动 */
+        }
+        .pwd-check-error {
+            color: #ff4d4f;
+        }
+        .pwd-check-success {
+            color: #52c41a;
+        }
+        .form-input.pwd-error {
+            border-color: #ff4d4f;
+        }
+        .form-input.pwd-success {
+            border-color: #52c41a;
+        }
+    </style>
+    <!-- 引入 Htmx -->
+    <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+</head>
+<body>
+    <div class="register-card">
+        <h2 class="register-title">用户注册</h2>
+        <div id="form-and-message-container">
+            <!-- 修复点 1：强化 hx-on:submit 拦截，接收 event 参数，显式阻止默认行为 -->
+            <form id="register-form" 
+                  action="/register" 
+                  method="post" 
+                  hx-post="/register" 
+                  hx-target="#form-and-message-container" 
+                  hx-swap="innerHTML"
+                  hx-on:submit="if (!checkPwdConsistency()) { htmx.preventDefault(event); return false; }">
+                <div class="form-group">
+                    <label for="username" class="form-label">用户名</label>
+                    <input type="text" id="username" name="username" class="form-input" placeholder="请输入要注册的用户名" required value="{{ username }}">
+                </div>
+                <div class="form-group">
+                    <label for="password" class="form-label">密码</label>
+		    <input type="password" 
+          		 id="password" 
+          		 name="password" 
+          		 class="form-input" 
+          		 placeholder="请输入6位以上密码" 
+          		 required
+          		 hx-on:input="checkPwdConsistency();">
+                </div>
+                <div class="form-group">
+                    <label for="confirm_password" class="form-label">确认密码</label>
+                    <input type="password" 
+                           id="confirm_password" 
+                           name="confirm_password" 
+                           class="form-input" 
+                           placeholder="请再次输入密码" 
+                           required
+                           hx-on:input="checkPwdConsistency();">
+                    <!-- 密码校验提示容器 -->
+                    <span id="pwd-check-tip" class="pwd-check-tip"></span>
+                </div>
+                <div class="error-tip {% if error_msg %}has-error{% endif %}" id="error-message">
+                    {% if error_msg %}
+                    <span>{{ error_msg }}</span>
+                    {% endif %}
+                </div>
+                <button type="submit" class="register-btn">提交注册</button>
+            </form>
+        </div>
+        <div class="login-link">
+            已有账号？<a href="/login">立即登录</a>
+        </div>
+    </div>
+
+    <script>
+        // 修复点 2：优化校验函数，确保返回值准确，边界情况处理更严谨
+        function checkPwdConsistency() {
+            // 获取 DOM 元素（避免重复获取，提升效率）
+            const passwordInput = document.getElementById('password');
+            const confirmPwdInput = document.getElementById('confirm_password');
+            const pwdCheckTip = document.getElementById('pwd-check-tip');
+            const minPwdLength = 6;
+
+            // 获取输入值并去空格
+            const password = passwordInput.value.trim();
+            const confirmPwd = confirmPwdInput.value.trim();
+
+            // 重置样式和提示
+            confirmPwdInput.classList.remove('pwd-error', 'pwd-success');
+            pwdCheckTip.classList.remove('pwd-check-error', 'pwd-check-success');
+            pwdCheckTip.textContent = '';
+
+            // -------------- 严谨的校验逻辑 --------------
+            // 1. 密码为空或长度不足
+            if (password.length < minPwdLength) {
+                if (confirmPwd.length > 0) {
+                    pwdCheckTip.textContent = '请先输入6位以上的密码';
+                    pwdCheckTip.classList.add('pwd-check-error');
+                    confirmPwdInput.classList.add('pwd-error');
+                }
+                return false; // 明确返回 false
+            }
+
+            // 2. 确认密码为空
+            if (confirmPwd.length === 0) {
+                pwdCheckTip.textContent = '请输入确认密码';
+                pwdCheckTip.classList.add('pwd-check-error');
+                confirmPwdInput.classList.add('pwd-error');
+                return false; // 明确返回 false
+            }
+
+            // 3. 两次密码不一致
+            if (password !== confirmPwd) {
+                pwdCheckTip.textContent = '两次输入的密码不一致';
+                pwdCheckTip.classList.add('pwd-check-error');
+                confirmPwdInput.classList.add('pwd-error');
+                return false; // 明确返回 false
+            }
+
+            // 4. 校验成功
+            pwdCheckTip.textContent = '两次输入的密码一致';
+            pwdCheckTip.classList.add('pwd-check-success');
+            confirmPwdInput.classList.add('pwd-success');
+            return true; // 明确返回 true
+        }
+    </script>
+</body>
+</html>

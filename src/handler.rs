@@ -179,28 +179,40 @@ pub async fn login(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let user = req.form::<String>("username").await.unwrap_or_default();
     let pass = req.form::<String>("password").await.unwrap_or_default();
 
-    let user_exist = sqlx::query!(
-	"select id from users where name = $1 and pass = $2",
+    let user_record = sqlx::query!(
+	"select pass from users where name = $1",
 	user,
-	pass,
-    ).fetch_optional(get_pgpool()).await.unwrap_or_default();
-
+    ).fetch_optional(get_pgpool()).await;
     
-    if user_exist.is_some() {
-	let mut session = Session::new();
-	session.insert(
-	    "username", 
-	    user
-	).unwrap();
-	depot.set_session(session);
+    match user_record {
+	Ok(Some(record)) => {
+	    if bcrypt::verify(pass, &record.pass).unwrap() {
+		let mut session = Session::new();
+		session.insert(
+		    "username", 
+		    &user
+		).unwrap();
+		depot.set_session(session);
 
-	res.headers_mut().insert(
-	    "HX-Redirect",
-	    HeaderValue::from_str("/todos").unwrap()
-	);
-    } else {
-	let error_html = "<span>用户名或密码错误，请重新输入！</span>";
-        res.render(Text::Html(error_html));
+		res.headers_mut().insert(
+		    "HX-Redirect",
+		    HeaderValue::from_str("/todos").unwrap(),
+		);
+
+		tracing::debug!(user = ?user, "user logged:");
+	    } else {
+		let error_html = "<span>密码错误，请重新输入！</span>";
+        	res.render(Text::Html(error_html));
+	    }
+	}
+	Ok(None) => {
+	    let error_html = "<span>用户名不存在，请重新输入！</span>";
+            res.render(Text::Html(error_html));
+	}
+	Err(e) => {
+	    let error_html = "<span>服务器内部错误！</span>";
+            res.render(Text::Html(error_html));
+	}
     }
 }
 
@@ -210,4 +222,92 @@ pub async fn logout(depot: &mut Depot, res: &mut Response) {
         session.remove("username");
     }
     res.render(Redirect::other("/"));
+}
+
+#[handler]
+pub async fn register(req: &mut Request, res: &mut Response) {
+    let bcrypt_cost: u32 = std::env::var("BCRYPT_COST")
+	.unwrap_or("10".to_string())
+	.parse()
+	.unwrap_or(10);
+
+    let user = req.form::<String>("username").await;
+    let pass = req.form::<String>("password").await;
+    let pass2 = req.form::<String>("confirm_password").await;
+
+    if let (Some(user), Some(pass), Some(pass2)) = (user, pass, pass2) {
+	if pass == pass2 {
+	    let pass_hash = bcrypt::hash(pass, bcrypt_cost).unwrap();
+	    //let pass_hash = "123456";
+	    match sqlx::query!(
+	        "insert into users (name, pass) values ($1, $2)",
+	        user,
+	        pass_hash,
+	    )
+	    .execute(get_pgpool())
+	    .await {
+		Ok(result) => {
+		    tracing::debug!("{:?}", result);
+
+	    	    if result.rows_affected() == 1 {
+	    		tracing::debug!("user added");
+
+	    		// 注册成功时，返回该 HTML 片段（替换原有表单）
+	    		let success_html = r#"
+	    		<div class="success-tip" style="text-align: center; padding: 24px 0;">
+	    		    <h3 style="color: #52c41a; margin-bottom: 16px;">🎉 注册成功！</h3>
+	    		    <p style="color: #666; font-size: 14px; margin-bottom: 20px;">
+	    		        将在 <span id="countdown" style="color: #1677ff; font-weight: 600;">3</span> 秒后自动跳转到登录页面...
+	    		    </p>
+	    		    <p style="font-size: 13px; color: #999;">
+	    		        若未自动跳转，请 <a href="/" style="color: #1677ff; text-decoration: none;">点击此处</a>
+	    		    </p>
+	    		</div>
+	    		
+	    		<script>
+	    		    // 1. 倒计时逻辑
+	    		    let countdown = 3;
+	    		    const countdownElement = document.getElementById('countdown');
+	    		    
+	    		    const timer = setInterval(() => {
+	    		        countdown--;
+	    		        countdownElement.innerText = countdown;
+	    		        
+	    		        // 2. 倒计时结束，自动跳转
+	    		        if (countdown <= 0) {
+	    		            clearInterval(timer);
+	    		            window.location.href = '/';
+	    		        }
+	    		    }, 1000);
+	    		</script>
+	    		"#;
+	    		
+	    		// 直接返回该 HTML 片段（Htmx 会自动替换容器内容）
+	    		res.render(Text::Html(success_html));
+	    	    }
+		}
+	    	Err(e) => {
+	    	    tracing::debug!("Error: {}", e);
+
+	    	    let error_html = r#"<span>用户名已存在，请更换用户名重新注册</span>"#;
+            	    res.render(Text::Html(format!(
+            	        r#"<div class="error-tip has-error">{}</div>"#,
+            	        error_html
+            	    )));
+	    	}
+	    }
+	}
+    }
+    //res.render(Text::Html("注册成功"));
+}
+
+#[handler]
+pub async fn show_register_page(res: &mut Response) {
+    let templates = crate::get_templates(); 
+    let mut context = tera::Context::new();
+    context.insert("username", "");
+    context.insert("error_msg", "");
+    let rendered = templates.render("register.html", &context).unwrap();
+    
+    res.render(Text::Html(rendered));
 }

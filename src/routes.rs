@@ -10,21 +10,23 @@ pub fn route() -> Router {
 	CookieStore::new(),
 	b"secretabsecretabsecretabsecretabsecretabsecretabsecretabsecretab",
     )
-    .cookie_name("xxx-cn")
+    .cookie_name("todo-test")
     .build()
     .unwrap();
 
     Router::new()
-	//.hoop(auth_handler)
-	.hoop(session_handler)
-        .push(Router::new().get(index))
+	.push(Router::new().path("register")
+	    .get(show_register_page)
+	    .post(register))
 	.push(Router::new().path("login").post(login))
-        .push(Router::new().path("logout").get(logout))
-        .push(Router::new().path("todos").push(todo_route()))
 	.push(
 	    Router::with_path("/static/{**path}")
 		.get(StaticDir::new(["static"]))
 	)
+	.hoop(session_handler)
+        .push(Router::new().get(index))
+        .push(Router::new().path("logout").get(logout))
+        .push(Router::new().path("todos").push(todo_route()))
 }
 
 fn todo_route() -> Router {
