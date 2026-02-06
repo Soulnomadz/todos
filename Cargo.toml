@@ -4,16 +4,19 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.100"
 bcrypt = "0.18.0"
 dotenvy = "0.15.7"
 futures = "0.3.31"
+lazy_static = "1.5.0"
 postgres = "0.19.12"
-salvo = { workspace = true, features = ["basic-auth", "jwt-auth", "session"] }
+salvo = { workspace = true, features = ["anyhow", "basic-auth", "jwt-auth", "session", "timeout"] }
 serde = { version = "1.0.228", features = ["derive"] }
 sqlx = { version = "0.8.6", features = ["postgres", "runtime-tokio", "time"] }
 tera = "1.20.1"
 testcontainers = "0.26.3"
 testcontainers-modules = { version = "0.14.0", features = ["blocking", "postgres", "redis"] }
+thiserror = "2.0.18"
 tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread"] }
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }

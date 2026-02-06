@@ -1,27 +1,44 @@
 use salvo::prelude::*;
 use salvo::http::HeaderValue;
 use salvo::session::Session;
-use crate::db::get_pgpool;
+use tera::Context;
+use anyhow::anyhow;
+use tokio::time::timeout;
+
+use std::time::Duration;
+
+use crate::{get_pgpool, TEMPLATES};
 use crate::types::*;
+use crate::error::TodoError;
 
-#[handler]
-pub fn index(res: &mut Response) {
-    let templates = crate::get_templates();
-    let mut context = tera::Context::new();
-    context.insert("username", "");
-    context.insert("error_msg", "");
-    let rendered = templates.render("login.html", &context).unwrap();
+fn render_template(res: &mut Response, template_name: &str, context: &Context) {
+    match TEMPLATES.render(template_name, context) {
+        Ok(rendered) => res.render(Text::Html(rendered)),
+        Err(e) => {
+            tracing::debug!("tera template render error: {e}");
 
-    res.render(Text::Html(rendered));     
+            res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
+            res.render(Text::Plain("internal server error"));
+        }
+    } 
 }
 
 #[handler]
-pub async fn list_todos(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+pub async fn index(res: &mut Response) {
+    let mut context = Context::new();
+    context.insert("username", "");
+    context.insert("error_msg", "");
+
+    render_template(res, "login.html", &context);
+}
+
+#[handler]
+pub async fn list_todos(req: &mut Request, depot: &mut Depot, res: &mut Response) -> Result<(), TodoError> {
     let session = match depot.session() {
 	Some(s) => s,
 	None => {
     	    res.render(Redirect::found("/"));
-	    return;
+	    return Ok(());
 	}
     };
 
@@ -30,10 +47,11 @@ pub async fn list_todos(req: &mut Request, depot: &mut Depot, res: &mut Response
 	None => {
 	    tracing::warn!("获取用户名失败或用户名不存在");
     	    res.render(Redirect::found("/"));
-	    return;
+	    return Ok(());
 	}
     };
 
+    //let todos: Vec<Todo> = match sqlx::query_as!(
     let todos: Vec<Todo> = sqlx::query_as!(
         Todo,
         "select id,text,completed from public.todos order by id desc",
@@ -41,17 +59,18 @@ pub async fn list_todos(req: &mut Request, depot: &mut Depot, res: &mut Response
     .fetch_all(get_pgpool())
     .await
     .map_err(|e| {
-        tracing::debug!("Error: {}", e);
-        salvo::http::StatusCode::BAD_REQUEST
-    }).unwrap();
+	tracing::debug!("database error: {e}");
 
-    let templates = crate::get_templates();
-    let mut context = tera::Context::new();
+	TodoError::SqlxError(e)
+    })?;
+
+    let mut context = Context::new();
     context.insert("username", &username);
     context.insert("todos", &todos);
-    let rendered = templates.render("todos.html", &context).unwrap();
 
-    res.render(Text::Html(rendered));
+    render_template(res, "todos.html", &context);
+
+    Ok(())
 } 
 
 #[handler]
@@ -77,35 +96,45 @@ pub async fn get_todo_by_id(req: &mut Request, res: &mut Response) {
 	},
 	Err(e) => {
             tracing::debug!("Error: {}", e);
-            salvo::http::StatusCode::INTERNAL_SERVER_ERROR;
+
+            res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
 	},
     }
 }
 
 #[handler]
 pub async fn create_todo(req: &mut Request, res: &mut Response) {
-    let new_todo: NewTodo = req
-        .parse_body_with_max_size(512)
+    let new_todo = match req
+        .parse_body_with_max_size::<NewTodo>(512)
         .await
-        .map_err(|e| {
+    {
+	Ok(todo) => todo,
+	Err(e) => {
             tracing::debug!("Error: {}", e);
-            salvo::http::StatusCode::BAD_REQUEST
-        }).unwrap();
-    
-    let ret = sqlx::query!(
+
+            res.status_code(StatusCode::BAD_REQUEST);
+	    return;
+	}
+    };
+
+    let result = match sqlx::query!(
         "insert into public.todos (text) values ($1) returning id",
         new_todo.text,
-    )
-	.fetch_one(get_pgpool())
-        .await
-        .map_err(|e| {
+    ).fetch_one(get_pgpool()).await
+    {
+	Ok(row) => row,
+	Err(e) => {
             tracing::debug!("Error: {}", e);
-            salvo::http::StatusCode::BAD_REQUEST
-        }).unwrap();
+
+            res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
+	    return;
+	} 
+    };
 
     tracing::debug!(todo = ?new_todo, "create todo");
 
-    res.render(Text::Plain(ret.id.to_string()));
+    res.status_code(StatusCode::CREATED);
+    res.render(Text::Plain(result.id.to_string()));
 }
 
 #[handler]
@@ -121,15 +150,17 @@ pub async fn update_todo(req: &mut Request, res: &mut Response) {
 
     tracing::debug!(id = id, "params:");
 
-    let todo: Todo = req
-        .parse_body_with_max_size(512)
-        .await
-        .map_err(|e| {
+    let todo: Todo = match req.parse_body_with_max_size(512).await {
+	Ok(row) => row,
+        Err(e) => {
             tracing::debug!("Error: {}", e);
-            salvo::http::StatusCode::BAD_REQUEST
-        }).unwrap();
+            
+            res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
+            return;
+        }
+    };
 
-    let result = sqlx::query!(
+    let result = match sqlx::query!(
         "update public.todos set text = $1, completed = $2 where id = $3",
         todo.text,
         todo.completed,
@@ -137,7 +168,15 @@ pub async fn update_todo(req: &mut Request, res: &mut Response) {
     )
         .execute(get_pgpool())
         .await
-        .unwrap();
+    {
+	Ok(ret) => ret,
+        Err(e) => {
+            tracing::debug!("Error: {}", e);
+
+            res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
+            return;
+        }
+    };
 
     if result.rows_affected() == 0 {
         tracing::debug!("Error: id not match！");
@@ -158,19 +197,28 @@ pub async fn delete_todo(req: &mut Request, res: &mut Response) {
         }
     };
 
-    let result = sqlx::query!(
+    match sqlx::query!(
         "delete from public.todos where id = $1",
         id,
-    )
-        .execute(get_pgpool())
-        .await
-        .unwrap();
+    ).execute(get_pgpool()).await 
+    {
+	Ok(result) => {
+    	    if result.rows_affected() == 0 {
+        	tracing::debug!("Error: id not found！");
 
-    if result.rows_affected() == 0 {
-        tracing::debug!("Error: id not found！");
-        res.status_code(StatusCode::BAD_REQUEST);
-    } else {
-        tracing::debug!(id = id, "deleted: ");
+        	res.status_code(StatusCode::BAD_REQUEST);
+    	    } else {
+    	        tracing::debug!(id = id, "deleted: ");
+
+        	res.status_code(StatusCode::NO_CONTENT);
+    	    }
+	}
+
+	Err(e) => {
+    	    tracing::debug!("Error: {e}");
+
+            res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
+	}
     }
 }
 
@@ -182,7 +230,8 @@ pub async fn login(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let user_record = sqlx::query!(
 	"select pass from users where name = $1",
 	user,
-    ).fetch_optional(get_pgpool()).await;
+    )
+    .fetch_optional(get_pgpool()).await;
     
     match user_record {
 	Ok(Some(record)) => {
@@ -210,6 +259,8 @@ pub async fn login(req: &mut Request, depot: &mut Depot, res: &mut Response) {
             res.render(Text::Html(error_html));
 	}
 	Err(e) => {
+	    tracing::debug!("sql执行失败");
+
 	    let error_html = "<span>服务器内部错误！</span>";
             res.render(Text::Html(error_html));
 	}
@@ -298,16 +349,43 @@ pub async fn register(req: &mut Request, res: &mut Response) {
 	    }
 	}
     }
-    //res.render(Text::Html("注册成功"));
 }
 
 #[handler]
 pub async fn show_register_page(res: &mut Response) {
-    let templates = crate::get_templates(); 
     let mut context = tera::Context::new();
     context.insert("username", "");
     context.insert("error_msg", "");
-    let rendered = templates.render("register.html", &context).unwrap();
     
-    res.render(Text::Html(rendered));
+    render_template(res, "register.html", &context);
+}
+
+#[handler]
+pub async fn timeout_middleware(req: &mut Request, depot: &mut Depot, res: &mut Response, ctrl: &mut FlowCtrl) {
+    const TIMEOUT_SECS: u64 = 3;
+    let timeout_duration = Duration::from_secs(TIMEOUT_SECS);
+
+    tokio::select! {
+        // 分支1：执行后续的请求处理逻辑（比如hello处理器）
+        _ = ctrl.call_next(req, depot, res) => {
+            tracing::info!("请求处理完成 ");
+        },
+        // 分支2：超时触发
+        _ = tokio::time::sleep(timeout_duration) => {
+            tracing::error!(
+		"timeout here"
+            );
+            
+            res.status_code(salvo::http::StatusCode::REQUEST_TIMEOUT);
+
+	    if req.headers().contains_key("Hx-Request") {
+                res.headers_mut().insert("HX-Status", "408".parse().unwrap());
+                res.headers_mut().insert("HX-Redirect", "/static/404.html".parse().unwrap());
+            }
+
+	    res.render(Redirect::found("/static/404.html"));
+            
+            ctrl.skip_rest();
+        }
+    }
 }

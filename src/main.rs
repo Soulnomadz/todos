@@ -1,6 +1,6 @@
 #[tokio::main]
 async fn main() {
-    todos::init().await;
+    todos::init();
     todos::start_server().await;
 }
 

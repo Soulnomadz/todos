@@ -3,9 +3,10 @@ use crate::handler::*;
 use salvo::basic_auth::BasicAuth;
 use salvo::session::{CookieStore, Session, SessionDepotExt, SessionHandler};
 
-pub fn route() -> Router {
-    //let auth_handler = BasicAuth::new(crate::middleware::Validator);
+use std::time::Duration;
+use crate::handler::timeout_middleware;
 
+pub fn route() -> Router {
     let session_handler = SessionHandler::builder(
 	CookieStore::new(),
 	b"secretabsecretabsecretabsecretabsecretabsecretabsecretabsecretab",
@@ -15,6 +16,8 @@ pub fn route() -> Router {
     .unwrap();
 
     Router::new()
+	//.hoop(Timeout::new(Duration::from_secs(3)))
+	.hoop(timeout_middleware)
 	.push(Router::new().path("register")
 	    .get(show_register_page)
 	    .post(register))

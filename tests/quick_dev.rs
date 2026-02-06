@@ -33,7 +33,7 @@ async fn test_02_crud_todo() -> httpc_test::Result<()> {
     ).await?;
 
     res.print().await?;
-    assert_eq!(res.status(), salvo::http::StatusCode::OK);
+    assert_eq!(res.status(), salvo::http::StatusCode::CREATED);
 
     let id = res.text_body()?;
     let url = format!("/todos/{id}");
@@ -59,7 +59,7 @@ async fn test_02_crud_todo() -> httpc_test::Result<()> {
     ).await?;
 
     res.print().await?;
-    assert_eq!(res.status(), salvo::http::StatusCode::OK);
+    assert_eq!(res.status(), salvo::http::StatusCode::NO_CONTENT);
 
     Ok(())
 }

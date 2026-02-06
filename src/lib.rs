@@ -1,42 +1,47 @@
 mod handler;
 pub mod types;
 pub mod routes;
-mod db;
-//mod middleware;
+mod error;
 
 use salvo::prelude::*;
 use sqlx::PgPool;
 use std::sync::OnceLock;
 use tera::Tera;
+use lazy_static::lazy_static;
+use error::TodoError;
 
-static TEMPLATES: OnceLock<Tera> = OnceLock::new();
+lazy_static! {
+    pub static ref TEMPLATES: Tera = {
+        Tera::new("templates/**/*.html").expect("tera template error")
+    };
 
-pub fn init_templates() -> &'static Tera {
-    TEMPLATES.get_or_init(|| {
-	Tera::new("templates/**/*.html").unwrap_or_else(|e| {
-	    panic!("templates init failed: {e}");
-	})
-    })
+    pub static ref PG_POOL: PgPool = {
+    	let db_url = std::env::var("DATABASE_URL")
+    	    .unwrap_or_else(|e| panic!("Failed to load env var: {}", e));
+
+    	PgPool::connect_lazy(&db_url)
+    	    .unwrap_or_else(|e| panic!("Failed to create db pool: {}", e))
+    };
 }
 
-pub fn get_templates() -> &'static Tera {
-    TEMPLATES.get().expect("templates not ready")
+#[inline]
+pub fn get_pgpool() -> &'static PgPool {
+    &PG_POOL
 }
 
+pub fn init() {
+    init_log();
+    init_env();
+}
 
-
-pub async fn init() {
+fn init_log() {
     tracing_subscriber::fmt()
-        .with_env_filter("debug") 
+        .with_env_filter("debug")
         .init();
+}
 
+fn init_env() {
     dotenvy::dotenv().ok();
-
-    let db_url = std::env::var("DATABASE_URL").unwrap();
-    let pool = PgPool::connect(&db_url).await.unwrap();
-    db::STORE.set(pool).unwrap();
-
-    init_templates();
 }
 
 pub async fn start_server() {
